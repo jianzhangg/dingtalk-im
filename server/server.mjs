@@ -239,11 +239,9 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true, items: list });
     }
     // 侧栏聚合口：会话 + 未读数(notificationOff/unreadPoint) + @数，一次给前端渲染
-    // 分页：dws 的 --cursor 分页无效（实测忽略），后端全量拉一次缓存 60s，按页切片
+    // 全量返回（dws 的 --cursor 分页无效，只能 --page-all 全拉；100 个约 1 个接口）
     if (req.method === "GET" && u.pathname === "/api/sidebar") {
-      const page = Math.max(1, Number(u.searchParams.get("page") || 1));
-      const limit = Math.min(50, Math.max(1, Number(u.searchParams.get("limit") || 20)));
-      if (page === 1 || !cache.convListTs || Date.now() - cache.convListTs > 60_000) {
+      if (!cache.convListTs || Date.now() - cache.convListTs > 60_000) {
         const all = unwrapList(runDws("chat", "+conversation-list", ["--page-all"]));
         cache.conversations = all;
       let unRaw = {};
@@ -316,8 +314,7 @@ const server = http.createServer(async (req, res) => {
       saveCacheSoon();
       } // end rebuild
       const allItems = cache.convList || [];
-      const start = (page - 1) * limit;
-      return send(res, 200, { ok: true, items: allItems.slice(start, start + limit), total: allItems.length, page });
+      return send(res, 200, { ok: true, items: allItems, total: allItems.length });
     }
     if (req.method === "GET" && u.pathname === "/api/members") {
       const conv = checkId(u.searchParams.get("conv") || "", "conv");

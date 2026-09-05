@@ -235,24 +235,14 @@ function fmtListTime(ts) {
   if (yest) return `昨天 ${hh}:${mm}`;
   return `${d.getMonth() + 1}-${d.getDate()}`;
 }
-async function loadConvs(reset) {
+async function loadConvs() {
   const ul = $("#convs");
-  if (reset) { state.page = 1; ul.innerHTML = ""; }
+  ul.innerHTML = "";
   $("#status").textContent = "拉取会话…";
-  const { items, total } = await api(`/api/sidebar?page=${state.page}&limit=20`);
+  const { items, total } = await api("/api/sidebar");
   for (const c of items) ul.appendChild(convRow(c));
-  state.page++;
-  state.hasMoreConvs = items.length === 20;
-  $("#status").textContent = `会话 ${ul.children.length}/${total} · SSE 已连`;
+  $("#status").textContent = `会话 ${total} · SSE 已连`;
 }
-$("#convs").addEventListener("scroll", () => {
-  const ul = $("#convs");
-  if (state.loadingConvs || !state.hasMoreConvs) return;
-  if (ul.scrollTop + ul.clientHeight > ul.scrollHeight - 200) {
-    state.loadingConvs = true;
-    loadConvs().finally(() => { state.loadingConvs = false; });
-  }
-});
 async function select(c, li) {
   document.querySelectorAll("#convs li").forEach((x) => x.classList.remove("active"));
   li.classList.add("active");
@@ -602,6 +592,6 @@ $("#input").onkeydown = (e) => {
 };
 (async () => {
   try { state.members.meName = (await api("/api/me")).me?.name || ""; } catch {}
-  await loadConvs(true).catch((e) => ($("#status").textContent = "失败：" + e.message));
+  await loadConvs().catch((e) => ($("#status").textContent = "失败：" + e.message));
   connectSSE();
 })();
