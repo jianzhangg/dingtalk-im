@@ -238,10 +238,14 @@ const server = http.createServer(async (req, res) => {
       saveCacheSoon();
       return send(res, 200, { ok: true, items: list });
     }
-    // 侧栏聚合口：会话 + 未读数(notificationOff/unreadPoint) + @数 + 免打扰集合，一次给前端渲染
+    // 侧栏聚合口：会话 + 未读数(notificationOff/unreadPoint) + @数，一次给前端渲染
+    // 分页：dws 的 --cursor 分页无效（实测忽略），后端全量拉一次缓存 60s，按页切片
     if (req.method === "GET" && u.pathname === "/api/sidebar") {
-      const all = unwrapList(runDws("chat", "+conversation-list", ["--page-all"]));
-      cache.conversations = all;
+      const page = Math.max(1, Number(u.searchParams.get("page") || 1));
+      const limit = Math.min(50, Math.max(1, Number(u.searchParams.get("limit") || 20)));
+      if (page === 1 || !cache.convListTs || Date.now() - cache.convListTs > 60_000) {
+        const all = unwrapList(runDws("chat", "+conversation-list", ["--page-all"]));
+        cache.conversations = all;
       let unRaw = {};
       try {
         unRaw = runDws("chat", "message list-unread-conversations", ["--count", "200"]);
@@ -267,7 +271,7 @@ const server = http.createServer(async (req, res) => {
         e.n++;
         if (it.sender && !e.senders.includes(it.sender)) e.senders.push(it.sender);
       }
-      const items = all.map((c) => {
+      const items = cache.conversations.map((c) => {
         const id = c.openConversationId || c.conversationId || c.openDingTalkId || c.userId || "";
         const uu = unById[id] || {};
         const at = atById[id] || { n: 0, senders: [] };
@@ -286,7 +290,6 @@ const server = http.createServer(async (req, res) => {
           atSenders: showAt.senders,
           lastMsgAt: last,
           lastMsgText: cached?.text || "",
-          pinned: !!cache.pins[id],
         };
       });
       // 后台补齐：只给群会话拉最新 1 条做预览（单聊 id 可能是 userId，
@@ -307,10 +310,14 @@ const server = http.createServer(async (req, res) => {
           } catch {}
         }
       } catch {}
-      // 排序：dws 接口原序；仅本地置顶浮到最上面（接口无置顶标志，置顶是你自己点的）
-      items.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+      // 排序：dws 接口原序，不做任何排序
+      cache.convList = items;
+      cache.convListTs = Date.now();
       saveCacheSoon();
-      return send(res, 200, { ok: true, items });
+      } // end rebuild
+      const allItems = cache.convList || [];
+      const start = (page - 1) * limit;
+      return send(res, 200, { ok: true, items: allItems.slice(start, start + limit), total: allItems.length, page });
     }
     if (req.method === "GET" && u.pathname === "/api/members") {
       const conv = checkId(u.searchParams.get("conv") || "", "conv");

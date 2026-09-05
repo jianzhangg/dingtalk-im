@@ -134,7 +134,7 @@ $("#msgs").addEventListener("click", async (e) => {
 });
 // 表情回应：悬浮条😊点开5个钉钉表情，点即贴到该消息
 const REACTS = [["👍", "赞"], ["👌", "OK"], ["❤️", "爱心"], ["😂", "大笑"], ["👏", "鼓掌"]];
-const REACT_ICON = Object.fromEntries([...REACTS.map(([u, n]) => [n, u]), ["已合并", "✅"]]);
+const REACT_ICON = Object.fromEntries(REACTS.map(([u, n]) => [n, u]));
 const reactIcon = (n) => REACT_ICON[n] || n;
 function openReactPick(mid, anchor) {
   closeReactPick();
@@ -217,18 +217,12 @@ function convRow(c) {
   const tm = c.lastMsgAt ? fmtListTime(c.lastMsgAt) : "";
   const right = c.unread
     ? `<div class="badge">${c.unread > 99 ? "99+" : c.unread}</div>`
-    : `${c.pinned ? `<span class="pin" title="已置顶">📌</span>` : ""}${c.muted ? `<span class="bell" title="免打扰">🔕</span>` : ""}`;
+    : `${c.muted ? `<span class="bell" title="免打扰">🔕</span>` : ""}`;
   li.innerHTML = `<div class="avatar" style="background-color:${avColor(c.name)}">${esc(c.name.slice(0, 1))}</div>
     <div class="nm"><div class="t"><span class="n">${esc(c.name)}${atTxt}</span>${tm ? `<span class="lt">${tm}</span>` : ""}</div>
-    <div class="s"><span class="sub">${sub}</span>${right}</div></div>
-    <span class="pinbtn" data-pin="${esc(c.id)}" data-on="${c.pinned ? 1 : 0}" title="${c.pinned ? "取消置顶" : "置顶"}">📌</span>`;
+    <div class="s"><span class="sub">${sub}</span>${right}</div></div>`;
   li.title = c.id;
   li.onclick = () => select(c, li);
-  li.querySelector(".pinbtn").onclick = async (ev) => {
-    ev.stopPropagation();
-    await api("/api/pin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: c.id, pin: !c.pinned }) });
-    loadConvs();
-  };
   if (state.convId === c.id) li.classList.add("active");
   return li;
 }
@@ -241,14 +235,24 @@ function fmtListTime(ts) {
   if (yest) return `昨天 ${hh}:${mm}`;
   return `${d.getMonth() + 1}-${d.getDate()}`;
 }
-async function loadConvs() {
-  $("#status").textContent = "拉取会话…";
-  const { items } = await api("/api/sidebar");
+async function loadConvs(reset) {
   const ul = $("#convs");
-  ul.innerHTML = "";
+  if (reset) { state.page = 1; ul.innerHTML = ""; }
+  $("#status").textContent = "拉取会话…";
+  const { items, total } = await api(`/api/sidebar?page=${state.page}&limit=20`);
   for (const c of items) ul.appendChild(convRow(c));
-  $("#status").textContent = `会话 ${items.length} 个 · SSE 已连`;
+  state.page++;
+  state.hasMoreConvs = items.length === 20;
+  $("#status").textContent = `会话 ${ul.children.length}/${total} · SSE 已连`;
 }
+$("#convs").addEventListener("scroll", () => {
+  const ul = $("#convs");
+  if (state.loadingConvs || !state.hasMoreConvs) return;
+  if (ul.scrollTop + ul.clientHeight > ul.scrollHeight - 200) {
+    state.loadingConvs = true;
+    loadConvs().finally(() => { state.loadingConvs = false; });
+  }
+});
 async function select(c, li) {
   document.querySelectorAll("#convs li").forEach((x) => x.classList.remove("active"));
   li.classList.add("active");
@@ -598,6 +602,6 @@ $("#input").onkeydown = (e) => {
 };
 (async () => {
   try { state.members.meName = (await api("/api/me")).me?.name || ""; } catch {}
-  await loadConvs().catch((e) => ($("#status").textContent = "失败：" + e.message));
+  await loadConvs(true).catch((e) => ($("#status").textContent = "失败：" + e.message));
   connectSSE();
 })();
