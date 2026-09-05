@@ -13,6 +13,10 @@
   aside header { padding: 10px 12px 6px; display: flex; gap: 8px; align-items: center; }
   aside header strong { font-size: 15px; }
   #status { font-size: 12px; color: var(--sub); padding: 0 12px 6px; }
+  #search-box { padding: 0 10px 8px; position: relative; display: flex; align-items: center; }
+  #search-input { width: 100%; padding: 6px 26px 6px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; outline: none; background: #f5f6f8; box-sizing: border-box; }
+  #search-input:focus { border-color: var(--dt-blue); background: #fff; }
+  #search-clear { position: absolute; right: 18px; color: var(--sub); cursor: pointer; font-size: 12px; }
   #convs { flex: 1; overflow: auto; margin: 0; padding: 0; list-style: none; }
   #convs li { display: flex; gap: 10px; padding: 10px 12px; cursor: pointer; align-items: center; position: relative; }
   #convs li:hover { background: #f5f6f8; }
@@ -28,7 +32,11 @@
   .avatar { width: 40px; height: 40px; border-radius: 6px; color: #fff; font-size: 16px; display: flex; align-items: center; justify-content: center; flex: none; }
   .avatar.sm { width: 34px; height: 34px; font-size: 14px; border-radius: 50%; }
   /* 聊天区 */
-  main { flex: 1; display: flex; flex-direction: column; background: var(--bg); min-width: 0; }
+  main { flex: 1; display: flex; flex-direction: column; background: var(--bg); min-width: 0; position: relative; }
+  #empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--sub); text-align: center; user-select: none; }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: .8; }
+  .empty-title { font-size: 18px; font-weight: 600; color: #1d2129; margin-bottom: 6px; }
+  .empty-sub { font-size: 13px; color: var(--sub); }
   main > header { background: #fff; border-bottom: 1px solid var(--line); padding: 10px 16px; font-size: 15px; font-weight: 600; }
   main > header small { color: var(--sub); font-weight: 400; margin-left: 8px; }
   #wrap { flex: 1; overflow: auto; padding: 12px 16px; position: relative; }
@@ -113,10 +121,10 @@
   #toolbar { display: flex; gap: 2px; align-items: center; }
   #toolbar button { background: none; border: 0; font-size: 18px; cursor: pointer; padding: 2px 8px; border-radius: 6px; color: #4e5969; display: flex; align-items: center; }
   #toolbar button:hover { background: #f2f3f5; }
-  #sendrow { display: flex; gap: 8px; }
-  footer input { flex: 1; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; outline: none; }
-  footer input:focus { border-color: var(--dt-blue); }
-  footer button { padding: 9px 12px; background: var(--dt-blue); color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+  #sendrow { display: flex; gap: 8px; align-items: flex-end; }
+  footer textarea { flex: 1; min-height: 38px; max-height: 120px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; outline: none; font-family: inherit; font-size: 14px; resize: none; line-height: 1.4; box-sizing: border-box; }
+  footer textarea:focus { border-color: var(--dt-blue); }
+  footer button { padding: 9px 12px; background: var(--dt-blue); color: #fff; border: 0; border-radius: 6px; cursor: pointer; height: 38px; }
   footer button:disabled { opacity: .5; }
   #imgbtn { background: none; border: 1px solid var(--line); border-radius: 6px; font-size: 16px; }
   #emobtn { background: none; border: 1px solid var(--line); border-radius: 6px; font-size: 16px; }
@@ -151,22 +159,31 @@
 <body>
 <aside>
   <header><strong>会话</strong></header>
+  <div id="search-box">
+    <input id="search-input" type="text" placeholder="搜索会话..." autocomplete="off" />
+    <span id="search-clear" style="display:none">✕</span>
+  </div>
   <div id="status">未连接</div>
   <ul id="convs"></ul>
 </aside>
 <main>
-  <header><span id="title">选一个会话开始聊天</span><small id="subtitle"></small></header>
-  <div id="wrap"><div id="msgs"></div><div id="pill">有新消息 ↓</div></div>
+  <div id="empty-state">
+    <div class="empty-icon">💬</div>
+    <div class="empty-title">钉钉网页版</div>
+    <div class="empty-sub">在左侧选择一个会话开始聊天</div>
+  </div>
+  <header id="main-header" style="display:none"><span id="title">选一个会话开始聊天</span><small id="subtitle"></small></header>
+  <div id="wrap" style="display:none"><div id="msgs"></div><div id="pill">有新消息 ↓</div></div>
   <div id="filepreview"></div>
   <div id="quotebar"><span class="qt"></span><span class="qx" onclick="cancelReply()">✕</span></div>
-  <footer>
+  <footer id="main-footer" style="display:none">
     <div id="atpick"></div>
     <div id="emopanel"><div class="emotab">常用 emoji（点即插入输入框）<span class="px" data-p="emopanel">✕</span></div><div id="emojirow"></div></div>
     <div id="stickerpanel"><div class="emotab">我的表情包（点即发送）<span class="px" data-p="stickerpanel">✕</span></div><div id="emogrid"></div></div>
     <div id="toolbar"><button id="tbtn-emo" title="emoji 表情"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/><path d="M8.5 14.5c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8"/></svg></button><button id="tbtn-sticker" title="表情包"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="11" r="7"/><circle cx="8.2" cy="9.6" r="1" fill="currentColor" stroke="none"/><circle cx="12.8" cy="9.6" r="1" fill="currentColor" stroke="none"/><path d="M7.8 12.8c.8 1 1.7 1.4 2.7 1.4s1.9-.4 2.7-1.4"/><path d="M17.2 15.2l.8 1.6 1.8.3-1.3 1.2.3 1.8-1.6-.9-1.6.9.3-1.8-1.3-1.2 1.8-.3z" fill="currentColor" stroke="none"/></svg></button><button id="tbtn-img" title="发送图片"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.7" fill="currentColor" stroke="none"/><path d="M4.5 17.5l4.5-4.5 3 3 3.5-3.5 4 4"/></svg></button><button id="tbtn-file" title="发送文件"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7a2 2 0 012-2h4l2 2.5h7a2 2 0 012 2V17a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/></svg></button></div>
     <div id="sendrow">
     <input id="filepick" type="file" style="display:none">
-    <input id="input" autocomplete="off" placeholder="输入消息，回车发送（@ 唤起成员，粘贴直接贴图）" />
+    <textarea id="input" rows="1" placeholder="输入消息，Enter 发送，Shift+Enter 换行（@ 唤起成员，粘贴直接贴图）"></textarea>
     <button id="send">发送</button>
     </div>
   </footer>

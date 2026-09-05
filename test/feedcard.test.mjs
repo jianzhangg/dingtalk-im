@@ -121,15 +121,15 @@ export function tryFormatReportCard(text) {
 test("parse feed card correctly", () => {
   const raw = `BIZ_TYPE_ONEFEED_POST
 dingtalk://dingtalkclient/page/link?url=https%3A%2F%2Fh5.dingtalk.com%2Fcircle%2FpostDetail.html%3FbizType%3D7%26bizId%3D730474289%26postId%3D22267156703
-[{"text":{"zh_Hans":"东营双福花卉\\n双福花卉在东营占地260多亩，全年销售1千多万株。"},"type":"PARAGRAPH"},{"images":["https://down-cdn.dingtalk.com/1.jpg","https://down-cdn.dingtalk.com/2.jpg"],"type":"IMAGE"},{"text":{"zh_Hans":"张艺泓 发布于 2026-09-05"},"type":"DESCRIPTION"}]
+[{"text":{"zh_Hans":"示例花卉基地\\n基地占地260多亩，全年销售1千多万株。"},"type":"PARAGRAPH"},{"images":["https://down-cdn.dingtalk.com/1.jpg","https://down-cdn.dingtalk.com/2.jpg"],"type":"IMAGE"},{"text":{"zh_Hans":"张三 发布于 2026-09-05"},"type":"DESCRIPTION"}]
 {"color":"#00B042","text":{"zh_Hans":"圈子"}}
 [{"text":{"zh_Hans":"评论 (2)"},"type":"JUMP"},{"text":{"zh_Hans":"点赞 (8)"},"type":"SUBMIT"}]`;
 
   const html = tryRenderFeedCard(raw);
   assert.ok(html);
-  assert.match(html, /东营双福花卉/);
+  assert.match(html, /示例花卉基地/);
   assert.match(html, /feed-grid g-2/);
-  assert.match(html, /张艺泓 发布于 2026-09-05/);
+  assert.match(html, /张三 发布于 2026-09-05/);
   assert.match(html, /h5\.dingtalk\.com/);
   assert.match(html, /评论 \(2\)/);
   assert.match(html, /点赞 \(8\)/);
@@ -148,10 +148,10 @@ test("markdown parsing with images and links", () => {
 });
 
 test("format report card properly", () => {
-  const raw = `张涛的🐱极蜂销售·日报
-所在城市：2026年9月5日新乡 晴
+  const raw = `示例销售工作日报
+所在城市：2026年9月5日某市 晴
 销售自拓商机进展：
-江山果业:已完成收费。
+示例客户A:已完成收费。
 
 0
 0
@@ -162,7 +162,7 @@ test("format report card properly", () => {
   const { text, reportHtml } = tryFormatReportCard(raw);
   assert.equal(text.includes("dingtalk://"), false);
   assert.equal(text.includes("viewReport_new.html"), false);
-  assert.match(text, /江山果业:已完成收费。/);
+  assert.match(text, /示例客户A:已完成收费。/);
   assert.match(reportHtml, /查看完整日志/);
   assert.match(reportHtml, /转存到文档/);
   assert.match(reportHtml, /👍 0 · 💬 0/);

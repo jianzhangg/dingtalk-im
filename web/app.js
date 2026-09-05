@@ -399,6 +399,10 @@ async function loadConvs() {
   $("#status").textContent = `会话 ${total} · SSE 已连`;
 }
 async function select(c, li) {
+  $("#empty-state").style.display = "none";
+  $("#main-header").style.display = "flex";
+  $("#wrap").style.display = "block";
+  $("#main-footer").style.display = "flex";
   document.querySelectorAll("#convs li").forEach((x) => x.classList.remove("active"));
   li.classList.add("active");
   state.conv = c;
@@ -525,6 +529,7 @@ async function send() {
     }
   }
   $("#input").value = "";
+  $("#input").style.height = "auto";
   state.atPicked = [];
   const rp = state.replyTo;
   cancelReply();
@@ -591,20 +596,151 @@ function pickAt(i) {
   closeAt();
   el.focus();
 }
+// 输入框键盘事件：@ 弹窗开启时按键选人；平时 Enter 发送，Shift+Enter 换行
+$("#input").addEventListener("keydown", (e) => {
+  if (state.atOpen) {
+    if (e.key === "ArrowDown") { e.preventDefault(); state.atIdx = (state.atIdx + 1) % state.atList.length; renderAt(); return; }
+    if (e.key === "ArrowUp") { e.preventDefault(); state.atIdx = (state.atIdx - 1 + state.atList.length) % state.atList.length; renderAt(); return; }
+    if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickAt(state.atIdx); return; }
+    if (e.key === "Escape") { closeAt(); return; }
+  } else if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    send();
+  }
+});
+
 $("#input").addEventListener("input", () => {
-  const el = $("#input"), pos = el.selectionStart ?? el.value.length;
+  const el = $("#input");
+  // 自动伸缩输入框高度（最高 120px）
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  const pos = el.selectionStart ?? el.value.length;
   const m = el.value.slice(0, pos).match(/@([^\s@]*)$/);
   if (m && state.kind === "group" && Object.keys(state.members.byId).length) openAt(m[1]);
   else closeAt();
 });
 $("#input").addEventListener("blur", () => setTimeout(closeAt, 150));
+
+// 侧栏即时搜索过滤
+$("#search-input")?.addEventListener("input", (e) => {
+  const kw = (e.target.value || "").trim().toLowerCase();
+  const clearBtn = $("#search-clear");
+  if (clearBtn) clearBtn.style.display = kw ? "block" : "none";
+  document.querySelectorAll("#convs li").forEach((li) => {
+    const name = (li.querySelector(".n")?.textContent || "").toLowerCase();
+    li.style.display = !kw || name.includes(kw) ? "flex" : "none";
+  });
+});
+$("#search-clear")?.addEventListener("click", () => {
+  const input = $("#search-input");
+  if (input) input.value = "";
+  $("#search-clear").style.display = "none";
+  document.querySelectorAll("#convs li").forEach((li) => (li.style.display = "flex"));
+});
+
+// 会话动态置顶与未读角标实时更新
+function bumpConversation(convId, addBadge = false) {
+  if (!convId) return;
+  const ul = $("#convs");
+  const li = [...ul.querySelectorAll("li")].find((x) => x.title === convId);
+  if (li) {
+    if (ul.firstElementChild !== li) {
+      ul.prepend(li);
+    }
+    if (addBadge) {
+      let badge = li.querySelector(".badge");
+      if (!badge) {
+        badge = document.createElement("div");
+        badge.className = "badge";
+        badge.textContent = "1";
+        li.querySelector(".t")?.appendChild(badge);
+      } else {
+        const cur = parseInt(badge.textContent, 10) || 0;
+        badge.textContent = cur >= 99 ? "99+" : String(cur + 1);
+      }
+    }
+  } else {
+    // 收到未在列表的陌生单聊/新群：静默重拉
+    syncSidebarSilent();
+  }
+}
+
+let syncingSidebar = false;
+async function syncSidebarSilent() {
+  if (syncingSidebar) return;
+  syncingSidebar = true;
+  try {
+    const { items } = await api("/api/sidebar");
+    const ul = $("#convs");
+    const have = new Set([...ul.querySelectorAll("li")].map((x) => x.title));
+    for (const c of items) {
+      if (!have.has(c.id)) {
+        ul.prepend(convRow(c));
+      }
+    }
+  } catch {}
+  finally { syncingSidebar = false; }
+}
+
+// 接收长连接事件分发
+function handleRealtimeEvent(data) {
+  if (!data) return;
+  const convId = data.openConversationId || data.conversationId || data.conversation?.openConversationId || data.cid;
+  const isCurrent = convId && convId === state.convId;
+
+  if (isCurrent) {
+    pollNewer();
+  }
+  if (convId) {
+    bumpConversation(convId, !isCurrent);
+  } else {
+    pollNewer();
+  }
+}
+
 function connectSSE() {
   state.es?.close();
   const es = new EventSource("/api/events");
   state.es = es;
-  es.onmessage = () => pollNewer();
+  es.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      handleRealtimeEvent(data);
+    } catch {
+      pollNewer();
+    }
+  };
   es.onerror = () => { $("#status").textContent = "事件流断开，靠手动刷新（后端重连中）"; };
 }
+
+// 静默未读同步（20秒兜底定时器，应对后台长连接断连或无事件权限环境）
+async function checkUnreadPeriodic() {
+  try {
+    const { items } = await api("/api/unread");
+    if (!Array.isArray(items)) return;
+    const ul = $("#convs");
+    for (const u of items) {
+      const id = u.openConversationId || u.conversationId;
+      if (!id || id === state.convId) continue;
+      const count = u.unreadPoint || 0;
+      if (count <= 0) continue;
+      const li = [...ul.querySelectorAll("li")].find((x) => x.title === id);
+      if (li) {
+        let badge = li.querySelector(".badge");
+        if (!badge) {
+          badge = document.createElement("div");
+          badge.className = "badge";
+          li.querySelector(".t")?.appendChild(badge);
+        }
+        badge.textContent = count > 99 ? "99+" : String(count);
+        if (ul.firstElementChild !== li) {
+          ul.prepend(li);
+        }
+      }
+    }
+  } catch {}
+}
+setInterval(checkUnreadPeriodic, 20_000);
 $("#wrap").addEventListener("scroll", () => {
   if ($("#wrap").scrollTop < 60) loadOlder();
   if (nearBottom() && state.pendNew > 0) {

@@ -15,5 +15,5 @@ test("input validation", () => {
   assert.equal(checkText("hi"), "hi");
   assert.throws(() => checkText(""), /invalid text/);
   assert.throws(() => checkId("a;b"), /invalid id/);
-  assert.equal(checkId("cid2d3j4Wii9TQqYUcybedKXg=="), "cid2d3j4Wii9TQqYUcybedKXg==");
+  assert.equal(checkId("cidMockValidConversationId123456789=="), "cidMockValidConversationId123456789==");
 });
