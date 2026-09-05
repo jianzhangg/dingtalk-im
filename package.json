@@ -1,0 +1,27 @@
+{
+  "name": "dingtalk-im",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Local-only DingTalk chat web UI backed by dws CLI. Zero dependencies.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "dingtalk-im": "./bin/dingtalk-im.mjs"
+  },
+  "files": [
+    "bin/",
+    "server/",
+    "web/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node ./bin/dingtalk-im.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

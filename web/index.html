@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>钉钉IM</title>
+<style>
+  :root { --dt-blue: #0089ff; --bg: #f2f3f5; --bubble: #fff; --bubble-me: #d9ecff; --line: #e5e6eb; --txt: #17233d; --sub: #86909c; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--txt); display: flex; height: 100vh; overflow: hidden; }
+  /* 会话列 */
+  aside { width: 280px; border-right: 1px solid var(--line); display: flex; flex-direction: column; background: #fff; flex: none; }
+  aside header { padding: 10px 12px 6px; display: flex; gap: 8px; align-items: center; }
+  aside header strong { font-size: 15px; }
+  #status { font-size: 12px; color: var(--sub); padding: 0 12px 6px; }
+  #convs { flex: 1; overflow: auto; margin: 0; padding: 0; list-style: none; }
+  #convs li { display: flex; gap: 10px; padding: 10px 12px; cursor: pointer; align-items: center; }
+  #convs li:hover { background: #f5f6f8; }
+  #convs li.active { background: #e8f1ff; }
+  #convs .nm { flex: 1; min-width: 0; }
+  #convs .nm .t { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #convs .nm .s { font-size: 12px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #convs .badge { min-width: 18px; height: 18px; border-radius: 9px; background: #f53f3f; color: #fff; font-size: 12px; text-align: center; line-height: 18px; padding: 0 5px; }
+  #convs .atme { font-size: 12px; color: #f53f3f; }
+  #convs .foldbtn { border: 0; background: none; cursor: pointer; color: var(--sub); font-size: 14px; padding: 2px 4px; }
+  #convs .foldbtn:hover { color: var(--dt-blue); }
+  #foldhead { display: flex; align-items: center; gap: 6px; padding: 10px 12px 4px; font-size: 12px; color: var(--sub); cursor: pointer; user-select: none; }
+  #foldhead:hover { color: var(--dt-blue); }
+  .avatar { width: 40px; height: 40px; border-radius: 6px; color: #fff; font-size: 16px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .avatar.sm { width: 34px; height: 34px; font-size: 14px; border-radius: 50%; }
+  /* 聊天区 */
+  main { flex: 1; display: flex; flex-direction: column; background: var(--bg); min-width: 0; }
+  main > header { background: #fff; border-bottom: 1px solid var(--line); padding: 10px 16px; font-size: 15px; font-weight: 600; }
+  main > header small { color: var(--sub); font-weight: 400; margin-left: 8px; }
+  #wrap { flex: 1; overflow: auto; padding: 12px 16px; position: relative; }
+  .day { text-align: center; color: var(--sub); font-size: 12px; margin: 12px 0 6px; }
+  .row { display: flex; gap: 8px; margin: 10px 0; align-items: flex-start; }
+  .row.me { flex-direction: row-reverse; }
+  .row .body { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+  .row.me .body { align-items: flex-end; }
+  .row .who { font-size: 12px; color: var(--sub); margin-bottom: 3px; }
+  .row .who .nm { cursor: pointer; }
+  .row .who .nm:hover { color: var(--dt-blue); }
+  .row .avatar.sm { cursor: pointer; }
+  .bubble { position: relative; width: fit-content; max-width: 65%; padding: 8px 12px; border-radius: 4px 12px 12px 12px; background: var(--bubble); white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .ops { position: absolute; top: 100%; margin-top: 4px; bottom: auto; left: 0; display: none; font-size: 12px; color: var(--sub); background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 3px 4px; gap: 2px; box-shadow: 0 2px 8px rgba(0,0,0,.12); z-index: 5; white-space: nowrap; }
+  .tools { position: absolute; top: auto; bottom: 0; display: none; color: var(--sub); background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 3px 4px; gap: 2px; box-shadow: 0 2px 8px rgba(0,0,0,.12); z-index: 5; white-space: nowrap; }
+  .row:not(.me) .tools { left: 100%; margin-left: 6px; }
+  .row.me .tools { right: 100%; margin-right: 6px; }
+  .tools svg { display: block; }
+  .row:hover .tools, .tools:hover { display: flex; }
+  .row:hover .ops, .row:hover .tools, .tools:hover { display: flex; }
+  .ops span, .tools span { padding: 2px 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; }
+  .ops span:hover, .tools span:hover { background: #e8f1ff; color: var(--dt-blue); }
+  #quotebar { display: none; align-items: center; gap: 8px; background: #fff; border-top: 1px solid var(--line); padding: 6px 12px; font-size: 12px; color: #4e5969; }
+  #quotebar .qt { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid var(--dt-blue); padding-left: 8px; }
+  #quotebar .qx { cursor: pointer; color: var(--sub); font-size: 14px; }
+  .row.me .bubble { border-radius: 12px 4px 12px 12px; background: var(--bubble-me); }
+  .bubble img { max-width: 100%; max-height: 320px; border-radius: 6px; display: block; margin: 4px 0; cursor: zoom-in; }
+  .bubble a { color: var(--dt-blue); }
+  .at { color: var(--dt-blue); background: rgba(0,137,255,.1); border-radius: 3px; padding: 0 2px; }
+  .quote { border-left: 3px solid var(--dt-blue); background: rgba(0,0,0,.04); padding: 4px 8px; margin-bottom: 6px; font-size: 12px; color: #4e5969; border-radius: 0 6px 6px 0; }
+  .filecard { display: flex; gap: 8px; align-items: center; background: rgba(0,0,0,.05); border-radius: 8px; padding: 8px 10px; margin: 4px 0; }
+  .filecard .fn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .filecard a { color: #fff; background: var(--dt-blue); border-radius: 6px; padding: 4px 12px; text-decoration: none; font-size: 12px; flex: none; }
+  .reacts { margin-top: 4px; display: flex; gap: 4px; flex-wrap: wrap; }
+  .react { font-size: 12px; color: #4e5969; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 2px 10px; line-height: 1.6; cursor: default; white-space: nowrap; }
+  .react.on { background: #e8f1ff; border-color: var(--dt-blue); color: var(--dt-blue); }
+  .row.me .react { background: rgba(0,137,255,.08); border-color: rgba(0,137,255,.25); }
+  #pill { position: sticky; bottom: 8px; margin: 0 auto; width: max-content; background: #fff; border: 1px solid var(--line); color: var(--dt-blue); border-radius: 14px; padding: 4px 14px; font-size: 12px; cursor: pointer; display: none; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+  #reactpick { position: fixed; background: #fff; border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 4px 16px rgba(0,0,0,.15); padding: 6px 10px; display: flex; gap: 4px; font-size: 20px; z-index: 99; }
+  #reactpick span { cursor: pointer; padding: 2px 4px; border-radius: 8px; }
+  #reactpick span:hover { background: #e8f1ff; }
+  footer { background: #fff; border-top: 1px solid var(--line); padding: 6px 12px 10px; display: flex; flex-direction: column; gap: 6px; position: relative; }
+  #toolbar { display: flex; gap: 2px; align-items: center; }
+  #toolbar button { background: none; border: 0; font-size: 18px; cursor: pointer; padding: 2px 8px; border-radius: 6px; color: #4e5969; display: flex; align-items: center; }
+  #toolbar button:hover { background: #f2f3f5; }
+  #sendrow { display: flex; gap: 8px; }
+  footer input { flex: 1; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; outline: none; }
+  footer input:focus { border-color: var(--dt-blue); }
+  footer button { padding: 9px 12px; background: var(--dt-blue); color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+  footer button:disabled { opacity: .5; }
+  #imgbtn { background: none; border: 1px solid var(--line); border-radius: 6px; font-size: 16px; }
+  #emobtn { background: none; border: 1px solid var(--line); border-radius: 6px; font-size: 16px; }
+  #plusbtn { background: none; border: 1px solid var(--line); border-radius: 6px; font-size: 18px; line-height: 1; }
+  #filepreview { display: none; gap: 8px; background: #fff; border-top: 1px solid var(--line); padding: 8px 12px; overflow-x: auto; }
+  #filepreview img { height: 64px; border-radius: 6px; }
+  #filepreview .fpick { position: relative; flex: none; }
+  #filepreview .fx { position: absolute; top: -6px; right: -6px; background: #666; color: #fff; border-radius: 50%; width: 18px; height: 18px; font-size: 12px; text-align: center; line-height: 18px; cursor: pointer; }
+  #filepreview .fname { font-size: 12px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #plusmenu { position: absolute; left: 12px; bottom: 52px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.12); display: none; min-width: 140px; z-index: 50; overflow: hidden; }
+  #plusmenu div { padding: 10px 14px; cursor: pointer; font-size: 14px; }
+  #plusmenu div:hover { background: #e8f1ff; }
+  #emopanel { position: absolute; left: 12px; bottom: 88px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.12); padding: 10px 12px; display: none; width: 340px; max-height: 260px; overflow: auto; z-index: 60; }
+  #stickerpanel { position: absolute; left: 12px; bottom: 88px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.12); padding: 10px 12px; display: none; width: 340px; max-height: 300px; overflow: auto; z-index: 60; }
+  #emopanel .px, #stickerpanel .px { float: right; cursor: pointer; color: var(--sub); padding: 0 4px; }
+  #emopanel .emotab { font-size: 12px; color: var(--sub); margin: 4px 0 6px; }
+  #emogrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  #emogrid img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #f5f6f8; border-radius: 6px; cursor: pointer; }
+  #emogrid .eno { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: #f5f6f8; border-radius: 6px; font-size: 12px; color: var(--sub); cursor: pointer; }
+  #emojirow { font-size: 22px; line-height: 2; cursor: pointer; user-select: none; }
+  #emojirow span { padding: 2px 4px; }
+  #emojirow span:hover { background: #e8f1ff; border-radius: 6px; }
+  .bubble img { min-height: 120px; background: #e9ebef; }
+  #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.82); display: none; align-items: center; justify-content: center; z-index: 99; cursor: zoom-out; }
+  #lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 8px; }
+  #lightbox .x { position: fixed; top: 14px; right: 20px; color: #fff; font-size: 26px; }
+  #atpick { position: absolute; left: 12px; bottom: 52px; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.12); max-height: 220px; overflow: auto; display: none; min-width: 180px; z-index: 50; }
+  #atpick div { padding: 8px 12px; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+  #atpick div.sel, #atpick div:hover { background: #e8f1ff; }
+</style>
+</head>
+<body>
+<aside>
+  <header><strong>会话</strong></header>
+  <div id="status">未连接</div>
+  <ul id="convs"></ul>
+</aside>
+<main>
+  <header><span id="title">选一个会话开始聊天</span><small id="subtitle"></small></header>
+  <div id="wrap"><div id="msgs"></div><div id="pill">有新消息 ↓</div></div>
+  <div id="filepreview"></div>
+  <div id="quotebar"><span class="qt"></span><span class="qx" onclick="cancelReply()">✕</span></div>
+  <footer>
+    <div id="atpick"></div>
+    <div id="emopanel"><div class="emotab">常用 emoji（点即插入输入框）<span class="px" data-p="emopanel">✕</span></div><div id="emojirow"></div></div>
+    <div id="stickerpanel"><div class="emotab">我的表情包（点即发送）<span class="px" data-p="stickerpanel">✕</span></div><div id="emogrid"></div></div>
+    <div id="toolbar"><button id="tbtn-emo" title="emoji 表情"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/><path d="M8.5 14.5c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8"/></svg></button><button id="tbtn-sticker" title="表情包"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="11" r="7"/><circle cx="8.2" cy="9.6" r="1" fill="currentColor" stroke="none"/><circle cx="12.8" cy="9.6" r="1" fill="currentColor" stroke="none"/><path d="M7.8 12.8c.8 1 1.7 1.4 2.7 1.4s1.9-.4 2.7-1.4"/><path d="M17.2 15.2l.8 1.6 1.8.3-1.3 1.2.3 1.8-1.6-.9-1.6.9.3-1.8-1.3-1.2 1.8-.3z" fill="currentColor" stroke="none"/></svg></button><button id="tbtn-img" title="发送图片"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.7" fill="currentColor" stroke="none"/><path d="M4.5 17.5l4.5-4.5 3 3 3.5-3.5 4 4"/></svg></button><button id="tbtn-file" title="发送文件"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7a2 2 0 012-2h4l2 2.5h7a2 2 0 012 2V17a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/></svg></button></div>
+    <div id="sendrow">
+    <input id="filepick" type="file" style="display:none">
+    <input id="input" autocomplete="off" placeholder="输入消息，回车发送（@ 唤起成员，粘贴直接贴图）" />
+    <button id="send">发送</button>
+    </div>
+  </footer>
+</main>
+<script src="./app.js"></script>
+<div id="lightbox" onclick="this.style.display='none'"><span class="x">×</span><img id="lightbox-img" alt="预览"></div>
+</body>
+</html>
