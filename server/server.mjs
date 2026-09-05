@@ -286,9 +286,12 @@ const server = http.createServer(async (req, res) => {
           atSenders: showAt.senders,
           lastMsgAt: last,
           lastMsgText: cached?.text || "",
+          pinned: !!cache.pins[id],
         };
       });
-      // 后台补齐：列表接口无时间，轮流给缺时间的群会话拉最新 1 条（每次最多 4 个，约 1.6s）
+      // 后台补齐：只给群会话拉最新 1 条做预览（单聊 id 可能是 userId，
+      // 传给 --open-dingtalk-id 会报 target_type_mismatch，故跳过；单聊点开即记时间）
+      // 排序：保持 dws 接口原序，不做时间排序
       try {
         const stale = items.filter((c) => !c.single && c.openId && (!cache.lastByConv[c.id] || Date.now() - cache.lastByConv[c.id].ts > 600_000));
         for (const c of stale.slice(0, 4)) {
@@ -304,8 +307,8 @@ const server = http.createServer(async (req, res) => {
           } catch {}
         }
       } catch {}
-      // 按最后一条消息时间倒序；无时间的沉底保持接口相对顺序
-      items.sort((a, b) => (b.lastMsgAt || 0) - (a.lastMsgAt || 0));
+      // 排序：dws 接口原序；仅本地置顶浮到最上面（接口无置顶标志，置顶是你自己点的）
+      items.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
       saveCacheSoon();
       return send(res, 200, { ok: true, items });
     }
@@ -440,6 +443,14 @@ const server = http.createServer(async (req, res) => {
       const id = convOpenId(b.kind === "direct" ? "direct" : "group", checkId(b.id));
       const r = runDws("chat", "+conversation-mark-read", ["--conversation-id", id, "--message-id", checkId(b.msgId || "", "msgId")]);
       return send(res, 200, { ok: true, result: r });
+    }
+    if (req.method === "POST" && u.pathname === "/api/pin") {
+      const b = await readBody(req);
+      const id = String(b.id || "");
+      if (!id) throw new Error("missing id");
+      if (b.pin) cache.pins[id] = 1; else delete cache.pins[id];
+      saveCacheSoon();
+      return send(res, 200, { ok: true, pinned: !!b.pin });
     }
     if (req.method === "POST" && u.pathname === "/api/react") {
       const b = await readBody(req);

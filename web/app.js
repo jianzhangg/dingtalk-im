@@ -134,7 +134,7 @@ $("#msgs").addEventListener("click", async (e) => {
 });
 // 表情回应：悬浮条😊点开5个钉钉表情，点即贴到该消息
 const REACTS = [["👍", "赞"], ["👌", "OK"], ["❤️", "爱心"], ["😂", "大笑"], ["👏", "鼓掌"]];
-const REACT_ICON = Object.fromEntries(REACTS.map(([u, n]) => [n, u]));
+const REACT_ICON = Object.fromEntries([...REACTS.map(([u, n]) => [n, u]), ["已合并", "✅"]]);
 const reactIcon = (n) => REACT_ICON[n] || n;
 function openReactPick(mid, anchor) {
   closeReactPick();
@@ -215,11 +215,20 @@ function convRow(c) {
   const atTxt = c.at ? ` <span class="atme">[${c.at}条@我]</span>` : "";
   const sub = c.at ? `${esc((c.atSenders || []).join("、"))} @了我` : c.unread ? `${c.unread} 条未读` : esc((c.lastMsgText || "").slice(0, 24));
   const tm = c.lastMsgAt ? fmtListTime(c.lastMsgAt) : "";
+  const right = c.unread
+    ? `<div class="badge">${c.unread > 99 ? "99+" : c.unread}</div>`
+    : `${c.pinned ? `<span class="pin" title="已置顶">📌</span>` : ""}${c.muted ? `<span class="bell" title="免打扰">🔕</span>` : ""}`;
   li.innerHTML = `<div class="avatar" style="background-color:${avColor(c.name)}">${esc(c.name.slice(0, 1))}</div>
-    <div class="nm"><div class="t">${esc(c.name)}${atTxt}${tm ? `<span class="lt">${tm}</span>` : ""}</div>
-    <div class="s">${sub}</div></div>${c.unread ? `<div class="badge">${c.unread > 99 ? "99+" : c.unread}</div>` : ""}`;
+    <div class="nm"><div class="t"><span class="n">${esc(c.name)}${atTxt}</span>${tm ? `<span class="lt">${tm}</span>` : ""}</div>
+    <div class="s"><span class="sub">${sub}</span>${right}</div></div>
+    <span class="pinbtn" data-pin="${esc(c.id)}" data-on="${c.pinned ? 1 : 0}" title="${c.pinned ? "取消置顶" : "置顶"}">📌</span>`;
   li.title = c.id;
   li.onclick = () => select(c, li);
+  li.querySelector(".pinbtn").onclick = async (ev) => {
+    ev.stopPropagation();
+    await api("/api/pin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: c.id, pin: !c.pinned }) });
+    loadConvs();
+  };
   if (state.convId === c.id) li.classList.add("active");
   return li;
 }
