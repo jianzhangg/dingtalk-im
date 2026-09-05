@@ -76,9 +76,15 @@ function unwrapList(r) {
   return r?.items || r?.list || r?.conversations || r?.messages || r?.data?.items || [];
 }
 
-// 单聊传的是对端 ID，需要会话 openConversationId 的口子先解析（结果缓存）
+// cid 开头 = 会话 openConversationId，有它一律走群式口子（--group/--chat-id），
+// 不再按单聊/群聊区分：单聊在列表里同样有 cid，而 --open-dingtalk-id 只认用户 ID，传 cid 必报 target_type_mismatch
+function isCid(id) {
+  return /^cid/i.test(String(id || ""));
+}
+
+// 单聊传的是对端 ID，需要会话 openConversationId 的口子先解析（结果缓存）；已是 cid 直接用
 function convOpenId(kind, id) {
-  if (kind !== "direct") return id;
+  if (kind !== "direct" || isCid(id)) return id;
   cache.convIds = cache.convIds || {};
   if (!cache.convIds[id]) {
     const r = runDws("chat", "+conversation-info", ["--open-dingtalk-id", id]);
@@ -344,10 +350,10 @@ const server = http.createServer(async (req, res) => {
       const limit = Math.min(Number(u.searchParams.get("limit") || 30), 100);
       // 无 time = 初次打开：拿最新 N 条；有 time + older = 向上翻旧消息
       const forward = hasTime && dir === "newer" ? "true" : "false";
-      const r =
-        kind === "direct"
-          ? runDws("chat", "+messages-list-direct", ["--open-dingtalk-id", id, "--time", time, "--forward=" + forward, "--limit", String(limit)])
-          : runDws("chat", "+messages-list", ["--group", id, "--time", time, "--forward=" + forward, "--limit", String(limit)]);
+      const useGroup = isCid(id) || kind !== "direct";
+      const r = useGroup
+        ? runDws("chat", "+messages-list", ["--group", kind === "direct" ? convOpenId(kind, id) : id, "--time", time, "--forward=" + forward, "--limit", String(limit)])
+        : runDws("chat", "+messages-list-direct", ["--open-dingtalk-id", id, "--time", time, "--forward=" + forward, "--limit", String(limit)]);
       const list = unwrapList(r).sort(byTimeAsc);
       putMessages(`${kind}:${id}`, list);
       // 顺手记下该会话最新一条，给侧栏排序/预览用
@@ -437,7 +443,7 @@ const server = http.createServer(async (req, res) => {
       const kind = b.kind === "direct" ? "direct" : "group";
       const text = checkText(b.text);
       const atIds = Array.isArray(b.atIds) ? [...new Set(b.atIds)].map((v) => checkId(v, "atId")) : [];
-      const target = kind === "direct" ? ["--open-dingtalk-id", checkId(b.id)] : ["--chat-id", checkId(b.id)];
+      const target = kind === "direct" && !isCid(b.id) ? ["--open-dingtalk-id", checkId(b.id)] : ["--chat-id", checkId(kind === "direct" ? convOpenId(kind, b.id) : b.id)];
       const extra = atIds.length && kind === "group" ? ["--at-open-dingtalk-ids", atIds.join(",")] : [];
       const r = runDws("chat", "+messages-send", ["--as", "user", ...target, "--text", text, "--ai-tag=false", ...extra]);
       return send(res, 200, { ok: true, result: r });
@@ -447,14 +453,6 @@ const server = http.createServer(async (req, res) => {
       const id = convOpenId(b.kind === "direct" ? "direct" : "group", checkId(b.id));
       const r = runDws("chat", "+conversation-mark-read", ["--conversation-id", id, "--message-id", checkId(b.msgId || "", "msgId")]);
       return send(res, 200, { ok: true, result: r });
-    }
-    if (req.method === "POST" && u.pathname === "/api/pin") {
-      const b = await readBody(req);
-      const id = String(b.id || "");
-      if (!id) throw new Error("missing id");
-      if (b.pin) cache.pins[id] = 1; else delete cache.pins[id];
-      saveCacheSoon();
-      return send(res, 200, { ok: true, pinned: !!b.pin });
     }
     if (req.method === "POST" && u.pathname === "/api/react") {
       const b = await readBody(req);
@@ -498,7 +496,7 @@ const server = http.createServer(async (req, res) => {
       }
       writeFileSync(join(upDir, tmp), raw);
       try {
-        const target = kind === "direct" ? ["--open-dingtalk-id", checkId(b.id)] : ["--chat-id", checkId(b.id)];
+        const target = kind === "direct" && !isCid(b.id) ? ["--open-dingtalk-id", checkId(b.id)] : ["--chat-id", checkId(kind === "direct" ? convOpenId(kind, b.id) : b.id)];
         const r = runDws("chat", "+messages-send", ["--as", "user", ...target, "--msg-type", "file", "--file", tmp, "--ai-tag=false"], { cwd: upDir, timeout: 120_000 });
         return send(res, 200, { ok: true, result: r });
       } finally {
