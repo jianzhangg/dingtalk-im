@@ -213,21 +213,31 @@ async function markRead() {
 function convRow(c) {
   const li = document.createElement("li");
   const atTxt = c.at ? ` <span class="atme">[${c.at}条@我]</span>` : "";
-  const sub = c.at ? `${esc((c.atSenders || []).join("、"))} @了我` : c.unread ? `${c.unread} 条未读` : "";
+  const sub = c.at ? `${esc((c.atSenders || []).join("、"))} @了我` : c.unread ? `${c.unread} 条未读` : esc((c.lastMsgText || "").slice(0, 24));
+  const tm = c.lastMsgAt ? fmtListTime(c.lastMsgAt) : "";
   li.innerHTML = `<div class="avatar" style="background-color:${avColor(c.name)}">${esc(c.name.slice(0, 1))}</div>
-    <div class="nm"><div class="t">${esc(c.name)}${atTxt}</div>
+    <div class="nm"><div class="t">${esc(c.name)}${atTxt}${tm ? `<span class="lt">${tm}</span>` : ""}</div>
     <div class="s">${sub}</div></div>${c.unread ? `<div class="badge">${c.unread > 99 ? "99+" : c.unread}</div>` : ""}`;
   li.title = c.id;
   li.onclick = () => select(c, li);
   if (state.convId === c.id) li.classList.add("active");
   return li;
 }
+function fmtListTime(ts) {
+  const d = new Date(ts), now = new Date();
+  const hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return `${hh}:${mm}`;
+  const yest = new Date(now - 864e5).toDateString() === d.toDateString();
+  if (yest) return `昨天 ${hh}:${mm}`;
+  return `${d.getMonth() + 1}-${d.getDate()}`;
+}
 async function loadConvs() {
   $("#status").textContent = "拉取会话…";
   const { items } = await api("/api/sidebar");
   const ul = $("#convs");
   ul.innerHTML = "";
-  for (const c of items.slice().reverse()) ul.appendChild(convRow(c));
+  for (const c of items) ul.appendChild(convRow(c));
   $("#status").textContent = `会话 ${items.length} 个 · SSE 已连`;
 }
 async function select(c, li) {

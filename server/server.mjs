@@ -94,6 +94,17 @@ function byTimeAsc(a, b) {
   return new Date(a.createTime?.replace(" ", "T")) - new Date(b.createTime?.replace(" ", "T"));
 }
 
+// 最后一条预览：富媒体只留类型标签，不暴露 mediaId 原串
+function previewText(m) {
+  const t = String(m?.text || "");
+  if (/^\[图片消息\]/.test(t)) return "[图片]";
+  if (/^\[语音\]/.test(t)) return "[语音]";
+  if (/^\[视频\]/.test(t)) return "[视频]";
+  if (/^\[文件\]/.test(t)) return "[文件]";
+  if (/^\[表情\]/.test(t)) return "[表情]";
+  return t.slice(0, 60);
+}
+
 // GET /api/events -> SSE from `dws event consume` (DingTalk Stream long-conn, NDJSON).
 function handleEvents(res) {
   res.writeHead(200, {
@@ -262,17 +273,39 @@ const server = http.createServer(async (req, res) => {
         const at = atById[id] || { n: 0, senders: [] };
         // @数只看未读里的：会话未读清零则@一起清（dws 的@列表本身无已读位）
         const showAt = (uu.n || 0) > 0 ? at : { n: 0, senders: [] };
+        const cached = cache.lastByConv[id];
+        const last = Math.max(uu.last || 0, cached?.at || 0);
         return {
           id,
+          openId: c.openConversationId || c.conversationId || "",
           name: c.conversationName || c.name || c.title || c.groupName || id,
           single: uu.single ?? !(c.openConversationId || c.conversationId),
           muted: mutedSet.has(id),
           unread: uu.n || 0,
           at: showAt.n,
           atSenders: showAt.senders,
-          lastMsgAt: uu.last || 0,
+          lastMsgAt: last,
+          lastMsgText: cached?.text || "",
         };
       });
+      // 后台补齐：列表接口无时间，轮流给缺时间的群会话拉最新 1 条（每次最多 4 个，约 1.6s）
+      try {
+        const stale = items.filter((c) => !c.single && c.openId && (!cache.lastByConv[c.id] || Date.now() - cache.lastByConv[c.id].ts > 600_000));
+        for (const c of stale.slice(0, 4)) {
+          try {
+            const r = runDws("chat", "+messages-list", ["--group", c.openId, "--time", fmtTime(new Date()), "--forward=false", "--limit", "1"]);
+            const m = unwrapList(r)[0];
+            if (m?.createTime) {
+              const at = new Date(String(m.createTime).replace(" ", "T")).getTime() || 0;
+              cache.lastByConv[c.id] = { at, text: previewText(m), ts: Date.now() };
+              putMessages(`group:${c.openId}`, [m]);
+              if (at > (c.lastMsgAt || 0)) { c.lastMsgAt = at; c.lastMsgText = previewText(m); }
+            }
+          } catch {}
+        }
+      } catch {}
+      // 按最后一条消息时间倒序；无时间的沉底保持接口相对顺序
+      items.sort((a, b) => (b.lastMsgAt || 0) - (a.lastMsgAt || 0));
       saveCacheSoon();
       return send(res, 200, { ok: true, items });
     }
@@ -310,6 +343,15 @@ const server = http.createServer(async (req, res) => {
           : runDws("chat", "+messages-list", ["--group", id, "--time", time, "--forward=" + forward, "--limit", String(limit)]);
       const list = unwrapList(r).sort(byTimeAsc);
       putMessages(`${kind}:${id}`, list);
+      // 顺手记下该会话最新一条，给侧栏排序/预览用
+      try {
+        const last = list[list.length - 1];
+        if (last?.createTime) {
+          const at = new Date(String(last.createTime).replace(" ", "T")).getTime() || 0;
+          const prev = cache.lastByConv[id]?.at || 0;
+          if (at >= prev) cache.lastByConv[id] = { at, text: previewText(last), ts: Date.now() };
+        }
+      } catch {}
       return send(res, 200, { ok: true, items: list, hasMore: !!r?.hasMore });
     }
     if (req.method === "GET" && u.pathname === "/api/resource") {

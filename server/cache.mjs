@@ -9,7 +9,7 @@ const root = process.env.DWS_IM_DATA_DIR || join(homedir(), ".dingtalk-im", "dat
 const file = join(root, "cache.json");
 
 let saveTimer = null;
-export let cache = { conversations: [], messages: {}, members: {}, readAt: {}, updatedAt: null };
+export let cache = { conversations: [], messages: {}, members: {}, readAt: {}, lastByConv: {}, convIds: {}, updatedAt: null };
 
 export function loadCache() {
   try {
@@ -18,8 +18,10 @@ export function loadCache() {
     cache.messages ||= {};
     cache.members ||= {};
     cache.readAt ||= {};
+    cache.lastByConv ||= {};
+    cache.convIds ||= {};
   } catch {
-    cache = { conversations: [], messages: {}, members: {}, readAt: {}, updatedAt: null };
+    cache = { conversations: [], messages: {}, members: {}, readAt: {}, lastByConv: {}, convIds: {}, updatedAt: null };
   }
   return cache;
 }
