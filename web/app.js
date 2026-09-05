@@ -227,27 +227,7 @@ async function loadConvs() {
   const { items } = await api("/api/sidebar");
   const ul = $("#convs");
   ul.innerHTML = "";
-  const normal = items.filter((c) => !c.muted);
-  const muted = items.filter((c) => c.muted);
-  for (const c of normal) ul.appendChild(convRow(c));
-  if (muted.length) {
-    const mUn = muted.reduce((a, c) => a + (c.unread || 0), 0);
-    const mAt = muted.reduce((a, c) => a + (c.at || 0), 0);
-    const head = document.createElement("div");
-    head.id = "foldhead";
-    head.innerHTML = `<span>▸</span><span>免打扰 (${muted.length})</span>${mAt ? `<span class="atme">[${mAt}条@我]</span>` : mUn ? `<span class="atme">${mUn}条未读</span>` : ""}`;
-    const body = document.createElement("div");
-    let isOpen = sessionStorage.getItem("dwsim.foldOpen") === "1";
-    const paint = () => {
-      head.querySelector("span").textContent = isOpen ? "▾" : "▸";
-      body.style.display = isOpen ? "" : "none";
-    };
-    paint();
-    head.onclick = () => { isOpen = !isOpen; sessionStorage.setItem("dwsim.foldOpen", isOpen ? "1" : "0"); paint(); };
-    for (const c of muted) body.appendChild(convRow(c));
-    ul.appendChild(head);
-    ul.appendChild(body);
-  }
+  for (const c of items.slice().reverse()) ul.appendChild(convRow(c));
   $("#status").textContent = `会话 ${items.length} 个 · SSE 已连`;
 }
 async function select(c, li) {
