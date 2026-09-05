@@ -39,25 +39,146 @@ function dayLabel(ts) {
   if (ymd(d) === ymd(y)) return `昨天 ${hm}`;
   return `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`;
 }
-// 富文本管线：转义 → 图片(mediaId) → 链接 → @高亮
+// 圈子互动卡片适配器：提取段落、九宫格图片、发布人和跳转链接
+function tryRenderFeedCard(text) {
+  if (!text || !text.includes("BIZ_TYPE_ONEFEED_POST")) return null;
+
+  let targetUrl = "";
+  const linkM = text.match(/dingtalk:\/\/dingtalkclient\/page\/link\?url=([^&\s]+)/);
+  if (linkM) {
+    try { targetUrl = decodeURIComponent(linkM[1]); } catch { targetUrl = linkM[1]; }
+  }
+
+  let paragraph = "";
+  let images = [];
+  let description = "";
+  let tag = "圈子";
+  const actions = [];
+
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("[") && !trimmed.startsWith("{")) continue;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (!item || typeof item !== "object") continue;
+          if (item.type === "PARAGRAPH") {
+            const p = item.text?.zh_Hans || (typeof item.text === "string" ? item.text : "");
+            if (p) paragraph = p;
+          } else if (item.type === "IMAGE" && Array.isArray(item.images)) {
+            images = images.concat(item.images);
+          } else if (item.type === "DESCRIPTION") {
+            const d = item.text?.zh_Hans || (typeof item.text === "string" ? item.text : "");
+            if (d) description = d;
+          } else if (item.text) {
+            const actText = item.text?.zh_Hans || (typeof item.text === "string" ? item.text : "");
+            if (actText && !actions.includes(actText)) actions.push(actText);
+          }
+        }
+      } else if (typeof parsed === "object" && parsed !== null) {
+        if (parsed.text?.zh_Hans) {
+          tag = parsed.text.zh_Hans;
+        }
+      }
+    } catch {}
+  }
+
+  if (!paragraph && !images.length && !description) return null;
+
+  let gridClass = "g-3";
+  if (images.length === 1) gridClass = "g-1";
+  else if (images.length <= 4) gridClass = "g-2";
+
+  const imgsHtml = images.length
+    ? `<div class="feed-grid ${gridClass}">${images.map((src) => `<img loading="lazy" src="${esc(src)}" onclick="openLightbox(this.src)" onerror="this.outerHTML='[图片]'">`).join("")}</div>`
+    : "";
+
+  const actionsHtml = actions.map((act) => `<span class="feed-act">${esc(act)}</span>`).join("");
+  const linkHtml = targetUrl ? `<a href="${esc(targetUrl)}" target="_blank" rel="noopener" class="feed-link">查看详情 ↗</a>` : "";
+
+  return `<div class="feed-card"><div class="feed-head"><span class="feed-badge">${esc(tag)}</span>${description ? `<span class="feed-desc">${esc(description)}</span>` : ""}</div>${paragraph ? `<div class="feed-text">${esc(paragraph)}</div>` : ""}${imgsHtml}<div class="feed-foot"><div class="feed-actions">${actionsHtml}</div>${linkHtml}</div></div>`;
+}
+
+// 初始化 marked 配置（图片/链接/换行）
+if (typeof window !== "undefined" && window.marked) {
+  try {
+    const renderer = new window.marked.Renderer();
+    renderer.image = ({ href, title, text }) => {
+      return `<img loading="lazy" src="${esc(href)}" alt="${esc(text || '图片')}" onclick="openLightbox(this.src)" onerror="this.outerHTML='[图片加载失败]'"/>`;
+    };
+    renderer.link = ({ href, title, text }) => {
+      return `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+    };
+    window.marked.use({
+      renderer,
+      breaks: true,
+      gfm: true,
+    });
+  } catch {}
+}
+
+// 富文本管线：圈子卡片 → 钉钉文件/图片 → Markdown 解析 → @高亮
 function rich(text, m, convOverride) {
   const conv = convOverride || state.convId;
-  let h = esc(text);
-  h = h.replace(/\[文件\]\s*(\S+)\s*fileId:\s*([A-Za-z0-9+/=_@$.-]+)(?:\s*url:\s*url)?/g, (_, nm, fid) => {
+
+  // 1. 圈子互动卡片特判适配
+  const feedCard = tryRenderFeedCard(text);
+  if (feedCard) return feedCard;
+
+  // 2. 预处理钉钉特有格式占位符
+  let t = String(text || "");
+
+  // 钉钉文件卡片占位符
+  const filePlaceholders = [];
+  t = t.replace(/\[文件\]\s*(\S+)\s*fileId:\s*([A-Za-z0-9+/=_@$.-]+)(?:\s*url:\s*url)?/g, (_, nm, fid) => {
     const href = `/api/resource?kind=${state.kind}&conv=${encodeURIComponent(conv)}&msg=${encodeURIComponent(msgIdOf(m))}&res=${encodeURIComponent(fid)}&type=fileId&name=${encodeURIComponent(nm)}`;
-    return `<div class="filecard"><span>📄</span><span class="fn">${esc(nm)}</span><a href="${href}">下载</a></div>`;
+    const ph = `__FILE_CARD_${filePlaceholders.length}__`;
+    filePlaceholders.push(`<div class="filecard"><span>📄</span><span class="fn">${esc(nm)}</span><a href="${href}">下载</a></div>`);
+    return ph;
   });
-  h = h.replace(/\[([^\]]*)\]\(mediaId=([@$][^)]+)\)/g, (_, alt, rid) => {
+
+  // 钉钉 mediaId 内部图片占位符
+  const mediaPlaceholders = [];
+  t = t.replace(/\[([^\]]*)\]\(mediaId=([@$][^)]+)\)/g, (_, alt, rid) => {
     const src = `/api/resource?kind=${state.kind}&conv=${encodeURIComponent(conv)}&msg=${encodeURIComponent(msgIdOf(m))}&res=${encodeURIComponent(rid)}`;
-    return `<img loading="lazy" src="${src}" alt="${esc(alt || "图片")}" onclick="openLightbox(this.src)" onerror="this.outerHTML='[图片加载失败]'">`;
+    const ph = `__MEDIA_IMG_${mediaPlaceholders.length}__`;
+    mediaPlaceholders.push(`<img loading="lazy" src="${src}" alt="${esc(alt || "图片")}" onclick="openLightbox(this.src)" onerror="this.outerHTML='[图片加载失败]'">`);
+    return ph;
   });
-  h = h.replace(/(https?:\/\/[^\s<>()"]+)/g, '<a href="$1" target="_blank">$1</a>');
-  const names = [...state.members.names].sort((a, b) => b.length - a.length);
+
+  // 修复钉钉有时发超链接时出现的 [url]\n(url) 错位换行
+  t = t.replace(/\[([^\]]+)\]\s*\r?\n\s*\((https?:\/\/[^\s)]+)\)/g, "[$1]($2)");
+
+  // 3. 判断是否包含 Markdown 标记并渲染
+  const hasMarkdown = /#{1,6}\s|[-*]\s+|\!\[|\[[^\]]+\]\([^\)]+\)|\*\*|__|\`\`\`|\`|\|/.test(t);
+  let h = "";
+  if (hasMarkdown && typeof window !== "undefined" && window.marked?.parse) {
+    try {
+      h = `<div class="md-body">${window.marked.parse(t)}</div>`;
+    } catch {
+      h = esc(t).replace(/(https?:\/\/[^\s<>()"]+)/g, '<a href="$1" target="_blank">$1</a>');
+    }
+  } else {
+    h = esc(t).replace(/(https?:\/\/[^\s<>()"]+)/g, '<a href="$1" target="_blank">$1</a>');
+  }
+
+  // 4. 还原钉钉文件与内部图片卡片占位符
+  filePlaceholders.forEach((card, i) => {
+    h = h.replace(`__FILE_CARD_${i}__`, card);
+  });
+  mediaPlaceholders.forEach((img, i) => {
+    h = h.replace(`__MEDIA_IMG_${i}__`, img);
+  });
+
+  // 5. @成员高亮
+  const names = [...(state.members?.names || [])].sort((a, b) => b.length - a.length);
   for (const n of names) {
     if (!n || !h.includes("@" + esc(n))) continue;
     h = h.split("@" + esc(n)).join(`<span class="at">@${esc(n)}</span>`);
   }
-  if (state.members.meName && h.includes("@" + esc(state.members.meName))) { /* 已在上面处理 */ }
+
   return h;
 }
 function avatarHtml(name, uid) {
