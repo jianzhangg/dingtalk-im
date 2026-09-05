@@ -49,7 +49,9 @@ function serveStatic(req, res) {
       ? join(WEB_DIR, "index.html")
       : raw === "/app.js"
         ? join(WEB_DIR, "app.js")
-        : null;
+        : raw === "/marked.min.js"
+          ? join(WEB_DIR, "marked.min.js")
+          : null;
   if (!file || !existsSync(file)) return false;
   const type = file.endsWith(".js") ? "text/javascript; charset=utf-8" : "text/html; charset=utf-8";
   res.writeHead(200, { "Content-Type": type });

@@ -68,6 +68,56 @@ export function tryRenderFeedCard(text) {
   return `<div class="feed-card"><div class="feed-head"><span class="feed-badge">${esc(tag)}</span>${description ? `<span class="feed-desc">${esc(description)}</span>` : ""}</div>${paragraph ? `<div class="feed-text">${esc(paragraph)}</div>` : ""}${imgsHtml}<div class="feed-foot"><div class="feed-actions">${actionsHtml}</div>${linkHtml}</div></div>`;
 }
 
+// 钉钉 OA 日志（蓝凌日志）卡片收敛适配器
+export function tryFormatReportCard(text) {
+  if (!text || !/landray\.dingtalkapps\.com|viewReport|dingdocSelectorV4\/save/i.test(text)) {
+    return { text, reportHtml: "" };
+  }
+
+  let s = String(text);
+  let viewUrl = "";
+  let saveUrl = "";
+
+  // 1. 提取网页端查看链接
+  const viewM = s.match(/https:\/\/landray\.dingtalkapps\.com\/[^\s)]+/);
+  if (viewM) {
+    viewUrl = viewM[0];
+  } else {
+    const redM = s.match(/redirect_url=([^&\s)]+)/);
+    if (redM) {
+      try { viewUrl = decodeURIComponent(redM[1]); } catch { viewUrl = redM[1]; }
+    }
+  }
+
+  // 2. 提取转存钉钉文档链接
+  const saveM = s.match(/https:\/\/alidocs\.dingtalk\.com\/i\/u\/dingdocSelectorV4\/save[^\s)]+/);
+  if (saveM) saveUrl = saveM[0];
+
+  // 3. 剥离末尾那几串冗长的 markdown 链接
+  s = s.replace(/\[(?:dingtalk|https?):\/\/[^\]]+\]\s*(?:\r?\n\s*)?\((?:dingtalk|https?):\/\/[^\)]+\)/g, "");
+
+  // 4. 剥离末尾孤立的点赞/评论计数字段（如 \n 0 \n 0）
+  let stats = "";
+  const statsM = s.match(/\n+(\d+)\s*\n+(\d+)\s*$/);
+  if (statsM) {
+    stats = `👍 ${statsM[1]} · 💬 ${statsM[2]}`;
+    s = s.slice(0, statsM.index);
+  }
+
+  // 清除尾部多余空白
+  s = s.trim();
+
+  const reportHtml = `
+    <div class="report-foot">
+      ${viewUrl ? `<a href="${esc(viewUrl)}" target="_blank" rel="noopener" class="report-btn">📘 查看完整日志</a>` : ""}
+      ${saveUrl ? `<a href="${esc(saveUrl)}" target="_blank" rel="noopener" class="report-btn">📁 转存到文档</a>` : ""}
+      ${stats ? `<span class="report-stats">${esc(stats)}</span>` : ""}
+    </div>
+  `.trim();
+
+  return { text: s, reportHtml };
+}
+
 test("parse feed card correctly", () => {
   const raw = `BIZ_TYPE_ONEFEED_POST
 dingtalk://dingtalkclient/page/link?url=https%3A%2F%2Fh5.dingtalk.com%2Fcircle%2FpostDetail.html%3FbizType%3D7%26bizId%3D730474289%26postId%3D22267156703
@@ -95,4 +145,25 @@ test("markdown parsing with images and links", () => {
 
   md = md.replace(/\[([^\]]+)\]\s*\r?\n\s*\((https?:\/\/[^\s)]+)\)/g, "[$1]($2)");
   assert.match(md, /\[https:\/\/alidocs\.dingtalk\.com\/doc\]\(https:\/\/alidocs\.dingtalk\.com\/doc\)/);
+});
+
+test("format report card properly", () => {
+  const raw = `张涛的🐱极蜂销售·日报
+所在城市：2026年9月5日新乡 晴
+销售自拓商机进展：
+江山果业:已完成收费。
+
+0
+0
+[dingtalk://dingtalkclient/action/openapp?redirect_url=https%3A%2F%2Flandray.dingtalkapps.com%2Fview](dingtalk://dingtalkclient/action/openapp?redirect_url=https%3A%2F%2Flandray.dingtalkapps.com%2Fview)
+[https://landray.dingtalkapps.com/alid/app/report/viewReport_new.html?id=123](https://landray.dingtalkapps.com/alid/app/report/viewReport_new.html?id=123)
+[https://alidocs.dingtalk.com/i/u/dingdocSelectorV4/save?resourceId=123](https://alidocs.dingtalk.com/i/u/dingdocSelectorV4/save?resourceId=123)`;
+
+  const { text, reportHtml } = tryFormatReportCard(raw);
+  assert.equal(text.includes("dingtalk://"), false);
+  assert.equal(text.includes("viewReport_new.html"), false);
+  assert.match(text, /江山果业:已完成收费。/);
+  assert.match(reportHtml, /查看完整日志/);
+  assert.match(reportHtml, /转存到文档/);
+  assert.match(reportHtml, /👍 0 · 💬 0/);
 });

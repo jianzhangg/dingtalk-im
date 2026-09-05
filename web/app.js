@@ -101,6 +101,56 @@ function tryRenderFeedCard(text) {
   return `<div class="feed-card"><div class="feed-head"><span class="feed-badge">${esc(tag)}</span>${description ? `<span class="feed-desc">${esc(description)}</span>` : ""}</div>${paragraph ? `<div class="feed-text">${esc(paragraph)}</div>` : ""}${imgsHtml}<div class="feed-foot"><div class="feed-actions">${actionsHtml}</div>${linkHtml}</div></div>`;
 }
 
+// 钉钉 OA 日志（蓝凌日志）卡片收敛适配器：剥离尾部超长 URL 和孤立计数字段，提取操作按钮
+function tryFormatReportCard(text) {
+  if (!text || !/landray\.dingtalkapps\.com|viewReport|dingdocSelectorV4\/save/i.test(text)) {
+    return { text, reportHtml: "" };
+  }
+
+  let s = String(text);
+  let viewUrl = "";
+  let saveUrl = "";
+
+  // 1. 提取网页端查看链接
+  const viewM = s.match(/https:\/\/landray\.dingtalkapps\.com\/[^\s)]+/);
+  if (viewM) {
+    viewUrl = viewM[0];
+  } else {
+    const redM = s.match(/redirect_url=([^&\s)]+)/);
+    if (redM) {
+      try { viewUrl = decodeURIComponent(redM[1]); } catch { viewUrl = redM[1]; }
+    }
+  }
+
+  // 2. 提取转存钉钉文档链接
+  const saveM = s.match(/https:\/\/alidocs\.dingtalk\.com\/i\/u\/dingdocSelectorV4\/save[^\s)]+/);
+  if (saveM) saveUrl = saveM[0];
+
+  // 3. 剥离末尾那几串冗长的 markdown 链接
+  s = s.replace(/\[(?:dingtalk|https?):\/\/[^\]]+\]\s*(?:\r?\n\s*)?\((?:dingtalk|https?):\/\/[^\)]+\)/g, "");
+
+  // 4. 剥离末尾孤立的点赞/评论计数字段（如 \n 0 \n 0）
+  let stats = "";
+  const statsM = s.match(/\n+(\d+)\s*\n+(\d+)\s*$/);
+  if (statsM) {
+    stats = `👍 ${statsM[1]} · 💬 ${statsM[2]}`;
+    s = s.slice(0, statsM.index);
+  }
+
+  // 清除尾部多余空白
+  s = s.trim();
+
+  const reportHtml = (viewUrl || saveUrl || stats) ? `
+    <div class="report-foot">
+      ${viewUrl ? `<a href="${esc(viewUrl)}" target="_blank" rel="noopener noreferrer" class="report-btn">📘 查看完整日志</a>` : ""}
+      ${saveUrl ? `<a href="${esc(saveUrl)}" target="_blank" rel="noopener noreferrer" class="report-btn">📁 转存到文档</a>` : ""}
+      ${stats ? `<span class="report-stats">${esc(stats)}</span>` : ""}
+    </div>
+  `.trim() : "";
+
+  return { text: s, reportHtml };
+}
+
 // 初始化 marked 配置（图片/链接/换行）
 if (typeof window !== "undefined" && window.marked) {
   try {
@@ -119,7 +169,7 @@ if (typeof window !== "undefined" && window.marked) {
   } catch {}
 }
 
-// 富文本管线：圈子卡片 → 钉钉文件/图片 → Markdown 解析 → @高亮
+// 富文本管线：圈子卡片 → 钉钉日志卡片 → 钉钉文件/图片 → Markdown 解析 → @高亮
 function rich(text, m, convOverride) {
   const conv = convOverride || state.convId;
 
@@ -127,8 +177,9 @@ function rich(text, m, convOverride) {
   const feedCard = tryRenderFeedCard(text);
   if (feedCard) return feedCard;
 
-  // 2. 预处理钉钉特有格式占位符
-  let t = String(text || "");
+  // 2. 钉钉 OA 日志（蓝凌日志）卡片收敛适配
+  const { text: cleanText, reportHtml } = tryFormatReportCard(text);
+  let t = String(cleanText || "");
 
   // 钉钉文件卡片占位符
   const filePlaceholders = [];
@@ -179,7 +230,7 @@ function rich(text, m, convOverride) {
     h = h.split("@" + esc(n)).join(`<span class="at">@${esc(n)}</span>`);
   }
 
-  return h;
+  return h + (reportHtml || "");
 }
 function avatarHtml(name, uid) {
   const t = String(name || "?").trim().slice(0, 1) || "?";
