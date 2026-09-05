@@ -167,3 +167,9 @@ test("format report card properly", () => {
   assert.match(reportHtml, /转存到文档/);
   assert.match(reportHtml, /👍 0 · 💬 0/);
 });
+
+test("placeholder cannot be corrupted by markdown strong syntax", () => {
+  const ph = "§§MEDIAIMG0§§";
+  assert.doesNotMatch(ph, /__/);
+  assert.doesNotMatch(ph, /\*\*/);
+});

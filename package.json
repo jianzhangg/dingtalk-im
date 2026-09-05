@@ -1,6 +1,6 @@
 {
   "name": "dingtalk-im",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "private": false,
   "description": "Local-only DingTalk chat web UI backed by dws CLI. Zero dependencies.",
   "license": "MIT",

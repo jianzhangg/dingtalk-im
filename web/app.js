@@ -181,20 +181,20 @@ function rich(text, m, convOverride) {
   const { text: cleanText, reportHtml } = tryFormatReportCard(text);
   let t = String(cleanText || "");
 
-  // 钉钉文件卡片占位符
+  // 钉钉文件卡片占位符（避免使用带有下划线等 Markdown 语法的符号）
   const filePlaceholders = [];
   t = t.replace(/\[文件\]\s*(\S+)\s*fileId:\s*([A-Za-z0-9+/=_@$.-]+)(?:\s*url:\s*url)?/g, (_, nm, fid) => {
     const href = `/api/resource?kind=${state.kind}&conv=${encodeURIComponent(conv)}&msg=${encodeURIComponent(msgIdOf(m))}&res=${encodeURIComponent(fid)}&type=fileId&name=${encodeURIComponent(nm)}`;
-    const ph = `__FILE_CARD_${filePlaceholders.length}__`;
+    const ph = `§§FILECARD${filePlaceholders.length}§§`;
     filePlaceholders.push(`<div class="filecard"><span>📄</span><span class="fn">${esc(nm)}</span><a href="${href}">下载</a></div>`);
     return ph;
   });
 
-  // 钉钉 mediaId 内部图片占位符
+  // 钉钉 mediaId 内部图片占位符（避免使用带有下划线等 Markdown 语法的符号）
   const mediaPlaceholders = [];
   t = t.replace(/\[([^\]]*)\]\(mediaId=([@$][^)]+)\)/g, (_, alt, rid) => {
     const src = `/api/resource?kind=${state.kind}&conv=${encodeURIComponent(conv)}&msg=${encodeURIComponent(msgIdOf(m))}&res=${encodeURIComponent(rid)}`;
-    const ph = `__MEDIA_IMG_${mediaPlaceholders.length}__`;
+    const ph = `§§MEDIAIMG${mediaPlaceholders.length}§§`;
     mediaPlaceholders.push(`<img loading="lazy" src="${src}" alt="${esc(alt || "图片")}" onclick="openLightbox(this.src)" onerror="this.outerHTML='[图片加载失败]'">`);
     return ph;
   });
@@ -217,10 +217,10 @@ function rich(text, m, convOverride) {
 
   // 4. 还原钉钉文件与内部图片卡片占位符
   filePlaceholders.forEach((card, i) => {
-    h = h.replace(`__FILE_CARD_${i}__`, card);
+    h = h.replace(`§§FILECARD${i}§§`, card);
   });
   mediaPlaceholders.forEach((img, i) => {
-    h = h.replace(`__MEDIA_IMG_${i}__`, img);
+    h = h.replace(`§§MEDIAIMG${i}§§`, img);
   });
 
   // 5. @成员高亮
