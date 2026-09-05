@@ -203,37 +203,20 @@ async function markRead() {
   const li = [...document.querySelectorAll("#convs li")].find((x) => x.title === state.convId);
   if (li) {
     li.querySelector(".badge")?.remove();
-    const t = li.querySelector(".t");
-    if (t) t.textContent = t.textContent.replace(/\s*\[\d+条@我\]/, "");
-    const s = li.querySelector(".s");
-    if (s && /未读|@了我/.test(s.textContent)) s.textContent = "";
   }
 }
 
 function convRow(c) {
   const li = document.createElement("li");
-  const atTxt = c.at ? ` <span class="atme">[${c.at}条@我]</span>` : "";
-  const sub = c.at ? `${esc((c.atSenders || []).join("、"))} @了我` : c.unread ? `${c.unread} 条未读` : esc((c.lastMsgText || "").slice(0, 24));
-  const tm = c.lastMsgAt ? fmtListTime(c.lastMsgAt) : "";
   const right = c.unread
     ? `<div class="badge">${c.unread > 99 ? "99+" : c.unread}</div>`
     : `${c.muted ? `<span class="bell" title="免打扰">🔕</span>` : ""}`;
   li.innerHTML = `<div class="avatar" style="background-color:${avColor(c.name)}">${esc(c.name.slice(0, 1))}</div>
-    <div class="nm"><div class="t"><span class="n">${esc(c.name)}${atTxt}</span>${tm ? `<span class="lt">${tm}</span>` : ""}</div>
-    <div class="s"><span class="sub">${sub}</span>${right}</div></div>`;
+    <div class="nm"><div class="t"><span class="n">${esc(c.name)}</span>${right}</div></div>`;
   li.title = c.id;
   li.onclick = () => select(c, li);
   if (state.convId === c.id) li.classList.add("active");
   return li;
-}
-function fmtListTime(ts) {
-  const d = new Date(ts), now = new Date();
-  const hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");
-  const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) return `${hh}:${mm}`;
-  const yest = new Date(now - 864e5).toDateString() === d.toDateString();
-  if (yest) return `昨天 ${hh}:${mm}`;
-  return `${d.getMonth() + 1}-${d.getDate()}`;
 }
 async function loadConvs() {
   const ul = $("#convs");
