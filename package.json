@@ -6,7 +6,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "dingtalk-im": "./bin/dingtalk-im.mjs"
+    "dingtalk-im": "bin/dingtalk-im.mjs"
   },
   "files": [
     "bin/",

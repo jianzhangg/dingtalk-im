@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // npx entry: ensure dws CLI -> ensure login -> start local IM server.
-//   npx dingtalk-im-local [--port 3777] [--no-open] [--data-dir <path>]
+//   npx dingtalk-im [--port 3777] [--no-open] [--data-dir <path>]
 import { spawnSync, spawn } from "node:child_process";
 import { accessSync } from "node:fs";
 import { join, dirname } from "node:path";
