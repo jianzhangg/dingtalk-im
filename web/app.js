@@ -480,13 +480,11 @@ async function pollNewer() {
       added++;
     }
     if (added) {
-      if (nearBottom()) { toBottom(); markRead(); }
-      else {
-        state.pendNew += added;
-        const p = $("#pill");
-        p.textContent = `${state.pendNew} 条新消息 ↓`;
-        p.style.display = "block";
-      }
+      // 当前会话有新消息（自己发的回显 / 别人发的 / 表情包）一律沉底并标已读，不再弹 pill 让用户手动点
+      state.pendNew = 0;
+      $("#pill").style.display = "none";
+      toBottom();
+      markRead();
     }
     // 发出去的 optimistic 临时节点一旦在服务端出现就撤掉，避免"我发的"显示两遍
     const now = Date.now();
@@ -496,7 +494,8 @@ async function pollNewer() {
       if (!mm.startsWith("tmp")) return;
       const bt = (r.querySelector(".bubble")?.innerText || "").trim();
       const ageOk = now - (+r.dataset.ts || now) < 120000;
-      const i = state.pending.findIndex((p) => bt === p.text || bt.endsWith(p.text));
+      // 引用回复的 optimistic 气泡 innerText = 正文 + 引用后缀，所以用 startsWith 匹配（普通消息走 ===）
+      const i = state.pending.findIndex((p) => bt === p.text || bt.startsWith(p.text) || bt.endsWith(p.text));
       if ((i >= 0 && ageOk) || !ageOk) {
         if (i >= 0) state.pending.splice(i, 1);
         r.remove();
@@ -603,7 +602,8 @@ $("#input").addEventListener("keydown", (e) => {
     if (e.key === "ArrowUp") { e.preventDefault(); state.atIdx = (state.atIdx - 1 + state.atList.length) % state.atList.length; renderAt(); return; }
     if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickAt(state.atIdx); return; }
     if (e.key === "Escape") { closeAt(); return; }
-  } else if (e.key === "Enter" && !e.shiftKey) {
+  } else if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    // isComposing：中文拼音输入中按回车是选字，不能当发送；Shift+Enter 是换行
     e.preventDefault();
     send();
   }
@@ -869,18 +869,6 @@ $("#input").addEventListener("paste", (e) => {
     stageFiles(fs);
   }
 });
-$("#input").onkeydown = (e) => {
-  if (state.atOpen && ["ArrowDown", "ArrowUp", "Tab", "Enter", "Escape"].includes(e.key)) {
-    e.preventDefault();
-    if (e.key === "ArrowDown") { state.atIdx = (state.atIdx + 1) % state.atList.length; renderAt(); }
-    if (e.key === "ArrowUp") { state.atIdx = (state.atIdx - 1 + state.atList.length) % state.atList.length; renderAt(); }
-    if (e.key === "Tab" || e.key === "Enter") pickAt(state.atIdx);
-    if (e.key === "Escape") closeAt();
-    return;
-  }
-  // isComposing：中文拼音输入中按回车是选字，不能当发送
-  if (e.key === "Enter" && !e.isComposing) send();
-};
 (async () => {
   try { state.members.meName = (await api("/api/me")).me?.name || ""; } catch {}
   await loadConvs().catch((e) => ($("#status").textContent = "失败：" + e.message));
